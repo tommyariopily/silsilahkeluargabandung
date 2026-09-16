@@ -34,14 +34,18 @@ body{
   color:var(--ink);
   display:flex;
   justify-content:center;
-  min-height:100vh;
+  /* --app-vh dihitung lewat JS (lihat akhir <script>) supaya akurat di
+     browser mobile yang toolbar-nya bisa muncul/hilang (alamat, dsb),
+     yang membuat 100vh murni lebih tinggi dari area yang benar-benar
+     terlihat dan menutupi bottom navigation. */
+  min-height: calc(var(--app-vh, 1vh) * 100);
 }
 h1,h2,h3,.serif{font-family:'Fraunces',serif;}
 button{font-family:inherit;}
 .app-shell{
   width:100%;
   max-width:430px;
-  min-height:100vh;
+  height: calc(var(--app-vh, 1vh) * 100);
   background:var(--bg);
   position:relative;
   display:flex;
@@ -244,7 +248,7 @@ button{font-family:inherit;}
 .submit-btn:disabled{opacity:.6;}
 
 /* ---------- Tree ---------- */
-.tree-wrap{position:relative; width:100%; height:calc(100vh - 130px); overflow:hidden; background:
+.tree-wrap{position:relative; width:100%; height:calc(var(--app-vh, 1vh) * 100 - 130px); overflow:hidden; background:
   radial-gradient(circle at 1px 1px, #D9E3DD 1.5px, transparent 0) 0 0/22px 22px, var(--bg); touch-action:none;}
 .tree-svg{position:absolute; top:0; left:0; cursor:grab;}
 .tree-svg:active{cursor:grabbing;}
@@ -1219,6 +1223,25 @@ document.getElementById("btnFullscreen").addEventListener("click", ()=>{
   wrap.addEventListener("touchmove", e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); }, {passive:true});
   wrap.addEventListener("touchend", end);
 })();
+
+/* =========================================================
+   VIEWPORT FIX — cegah bottom nav tertutup toolbar browser mobile
+   =========================================================
+   1vh di banyak browser mobile dihitung dari tinggi viewport penuh
+   (termasuk area yang tertutup address bar/toolbar), bukan dari area
+   yang benar-benar terlihat. Ini membuat elemen yang menempel di
+   "bottom:0" (seperti bottom navigation) bisa berada di luar layar.
+   Kita hitung ulang lewat window.innerHeight yang selalu akurat.
+*/
+function setAppVh(){
+  document.documentElement.style.setProperty('--app-vh', (window.innerHeight * 0.01) + 'px');
+}
+setAppVh();
+window.addEventListener('resize', setAppVh);
+window.addEventListener('orientationchange', ()=> setTimeout(setAppVh, 150));
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', setAppVh);
+}
 
 /* =========================================================
    INISIALISASI
