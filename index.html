@@ -305,6 +305,7 @@ button{font-family:inherit;}
 .unit-card text.name{font-family:'Inter',sans-serif; font-weight:600; fill:var(--ink);}
 .unit-card text.sub{font-family:'Inter',sans-serif; fill:var(--muted);}
 .tree-link{stroke:#B9C6BF; stroke-width:1.6; fill:none;}
+.tree-link.cross-link{stroke:var(--secondary); stroke-width:1.4; stroke-dasharray:5 4; opacity:.6;}
 .spouse-link{stroke:#B9C6BF; stroke-width:1.6;}
 .toggle-btn circle{fill:var(--surface); stroke:var(--border);}
 .toggle-btn text{fill:var(--muted); font-size:11px; font-weight:700; font-family:'Inter',sans-serif;}
@@ -1414,10 +1415,12 @@ function refreshCurrentScreen(){
    SILSILAH — tree dinamis (SVG), pan & zoom, expand/collapse
    ========================================================= */
 const TREE = { scale:1, tx:40, ty:40, collapsed:new Set(), focusId:null };
+let crossLinks = []; // link ortu->anak yg "terpotong" krn dedup pasangan (lihat buildUnit)
 const NODE_W_SINGLE = 116, NODE_W_PAIR = 210, NODE_H = 78, GAP_X = 46, GAP_Y = 110;
 
 function buildForest(){
   const placed = new Set(); // seluruh id yang sudah tampil sbg kartu, di cabang manapun
+  crossLinks = []; // reset — diisi ulang tiap buildForest() dipanggil
   const roots = MEMBERS.filter(m => !m.father_id && !m.mother_id);
   const rootUnits = [];
   roots.forEach(m=>{
@@ -1446,7 +1449,13 @@ function buildUnit(primary, spouse, ancestry, placed){
     if(!child) return;
     const childSpouse = getSpouse(child);
     const childUnit = buildUnit(child, childSpouse, newAncestry, placed);
-    if(childUnit) unit.children.push(childUnit);
+    if(childUnit){
+      unit.children.push(childUnit);
+    } else if(placed.has(cid)){
+      // Anak ini sudah tergambar di cabang lain (menikah ke keluarga lain) —
+      // catat supaya digambar garis penghubung lintas-cabang, bukan hilang begitu saja.
+      crossLinks.push({ parentUnitId: unit.id, childId: cid });
+    }
   });
   return unit;
 }
@@ -1500,6 +1509,38 @@ async function renderTree(){
       path.setAttribute("d", `M${px},${py} L${px},${midY} L${cx},${midY} L${cx},${cy}`);
       g.appendChild(path);
     });
+  });
+
+  // posisi kartu tiap orang (dipakai utk menggambar garis lintas-cabang di bawah)
+  const memberPos = {};
+  allUnits.forEach(u=>{
+    const baseX = 40 + u.x*unitWidth;
+    const baseY = 40 + u.depth*(NODE_H+GAP_Y);
+    if(u.members.length===2){
+      memberPos[u.members[0].id] = { x: baseX, y: baseY };
+      memberPos[u.members[1].id] = { x: baseX+unitWidth-96, y: baseY };
+    } else {
+      memberPos[u.members[0].id] = { x: baseX + (unitWidth-96)/2, y: baseY };
+    }
+  });
+
+  // garis penghubung lintas-cabang: orang tua yg anaknya tergambar di cabang
+  // pasangannya (lihat buildUnit) — pakai garis putus-putus agar beda dgn
+  // garis keturunan langsung.
+  crossLinks.forEach(link=>{
+    const parentUnit = allUnits.find(u=>u.id===link.parentUnitId);
+    const childPos = memberPos[link.childId];
+    if(!parentUnit || !childPos) return;
+    if(TREE.collapsed.has(parentUnit.id)) return;
+    const px = 40 + parentUnit.x*unitWidth + unitWidth/2;
+    const py = 40 + parentUnit.depth*(NODE_H+GAP_Y) + NODE_H;
+    const cx = childPos.x + 48;
+    const cy = childPos.y;
+    const midY = (py+cy)/2;
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("class","tree-link cross-link");
+    path.setAttribute("d", `M${px},${py} C${px},${midY} ${cx},${midY} ${cx},${cy}`);
+    g.appendChild(path);
   });
 
   // unit cards
