@@ -617,8 +617,8 @@ button{font-family:inherit;}
    CONFIG  (siap disambungkan ke Google Apps Script Web App)
    ========================================================= */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzayiaibNuQjZfOOkZBlFVj9EkaEj6SE1wDZqxp8ui07XuZmRGfCMxoSDhVxFeWXCO9/exec", // ganti dengan URL deploy GAS
-  USE_MOCK: false                    // set false setelah backend GAS siap
+  API_URL: "YOUR_GAS_WEB_APP_URL", // ganti dengan URL deploy GAS
+  USE_MOCK: true                    // set false setelah backend GAS siap
 };
 
 /* =========================================================
@@ -721,7 +721,47 @@ function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
  * gasGet/gasPost — dipakai hanya saat CONFIG.USE_MOCK = false.
  * POST dikirim dgn Content-Type "text/plain" supaya tidak memicu
  * preflight CORS OPTIONS (GAS Web App tidak bisa membalas preflight).
+ *
+ * Aksi tulis (tambah/ubah/hapus/upload foto) memerlukan kata sandi edit
+ * bersama yang diatur admin di sheet "Pengaturan" (key: edit_password).
+ * Kata sandi diminta sekali lewat modal, lalu disimpan di localStorage HP
+ * masing-masing pengguna — tidak perlu login akun.
  */
+const EDIT_PASSWORD_KEY = "silsilah_edit_password";
+const WRITE_ACTIONS = ["addMember", "updateMember", "deleteMember", "uploadPhoto"];
+
+function showPasswordModal(){
+  return new Promise((resolve)=>{
+    const sheet = document.getElementById("modalSheet");
+    sheet.innerHTML = `
+      <div class="sheet-handle"></div>
+      <div class="confirm-box">
+        <h3>Masukkan Kata Sandi Edit</h3>
+        <p>Diperlukan untuk menambah, mengubah, atau menghapus anggota keluarga. Tanyakan kata sandi ini ke admin keluarga.</p>
+        <div class="form-group" style="text-align:left; margin-top:14px; margin-bottom:0;">
+          <input type="password" id="editPasswordInput" placeholder="Kata sandi" autocomplete="current-password">
+        </div>
+        <div class="confirm-actions">
+          <button class="btn-outline" id="btnCancelPassword">Batal</button>
+          <button class="btn-primary" id="btnSavePassword">Simpan &amp; Lanjutkan</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("modalOverlay").classList.add("active");
+    const input = document.getElementById("editPasswordInput");
+    setTimeout(()=> input.focus(), 50);
+    function cleanup(){ document.getElementById("modalOverlay").classList.remove("active"); }
+    document.getElementById("btnCancelPassword").addEventListener("click", ()=>{ cleanup(); resolve(null); });
+    document.getElementById("btnSavePassword").addEventListener("click", ()=>{
+      const val = input.value.trim();
+      if(!val){ toast("Kata sandi tidak boleh kosong.", "error"); return; }
+      localStorage.setItem(EDIT_PASSWORD_KEY, val);
+      cleanup();
+      resolve(val);
+    });
+    input.addEventListener("keydown", (e)=>{ if(e.key==="Enter") document.getElementById("btnSavePassword").click(); });
+  });
+}
 async function gasGet(action, params){
   try{
     const url = new URL(CONFIG.API_URL);
@@ -734,13 +774,25 @@ async function gasGet(action, params){
   }
 }
 async function gasPost(body){
+  if(WRITE_ACTIONS.includes(body.action)){
+    let pwd = localStorage.getItem(EDIT_PASSWORD_KEY);
+    if(!pwd){
+      pwd = await showPasswordModal();
+      if(pwd===null) return fail("Dibatalkan — kata sandi diperlukan untuk melanjutkan.");
+    }
+    body.password = pwd;
+  }
   try{
     const res = await fetch(CONFIG.API_URL, {
       method: 'POST',
       headers: {'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify(body)
     });
-    return await res.json();
+    const json = await res.json();
+    if(!json.success && /kata sandi/i.test(json.message||"")){
+      localStorage.removeItem(EDIT_PASSWORD_KEY); // salah sandi → minta ulang lain kali
+    }
+    return json;
   }catch(err){
     return fail("Terjadi kesalahan. Periksa koneksi atau URL_API di CONFIG.");
   }
