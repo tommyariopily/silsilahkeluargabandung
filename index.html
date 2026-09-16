@@ -1056,16 +1056,44 @@ function hideFormBanner(){
   el.style.display = "none";
   el.innerHTML = "";
 }
+let editingMemberId = null; // diisi oleh startEditMember(); null berarti mode Tambah
+
 async function applyFormPreset(){
   await populateFamilySelects();
   hideFormBanner();
-  if(!formPreset) return;
+  if(!formPreset){
+    editingMemberId = null;
+    setFormMode();
+    return;
+  }
   const p = formPreset; formPreset = null;
-  if(p.father_id) document.getElementById("f-ayah").value = p.father_id;
-  if(p.mother_id) document.getElementById("f-ibu").value = p.mother_id;
-  if(p.spouse_id) document.getElementById("f-pasangan").value = p.spouse_id;
-  if(p.jenis_kelamin) document.getElementById("f-gender").value = p.jenis_kelamin;
+  editingMemberId = p.editId || null;
+
+  const fieldMap = {
+    nama_lengkap:"f-nama", nama_panggilan:"f-panggilan", jenis_kelamin:"f-gender",
+    tempat_lahir:"f-tempat", tanggal_lahir:"f-tgl", status_hidup:"f-status",
+    tanggal_wafat:"f-tglwafat", pekerjaan:"f-pekerjaan", pendidikan:"f-pendidikan",
+    alamat:"f-alamat", nomor_telepon:"f-telp", email:"f-email", catatan:"f-catatan",
+    father_id:"f-ayah", mother_id:"f-ibu", spouse_id:"f-pasangan"
+  };
+  Object.keys(fieldMap).forEach(key=>{
+    if(p[key] !== undefined && p[key] !== null && p[key] !== ""){
+      document.getElementById(fieldMap[key]).value = p[key];
+    }
+  });
+  if(p.status_hidup === "Wafat") document.getElementById("fg-wafat").style.display = "block";
+  if(p.foto){
+    existingPhotoUrl = p.foto;
+    document.getElementById("photoPreview").innerHTML = `<img src="${p.foto}" alt="Foto">`;
+    document.getElementById("btnRemovePhoto").style.display = "inline-block";
+  }
   if(p.bannerText) showFormBanner(p.bannerText);
+  setFormMode();
+}
+function setFormMode(){
+  document.getElementById("submitBtn").textContent = editingMemberId ? "Simpan Perubahan" : "Simpan Anggota";
+  document.getElementById("topTitle").textContent = editingMemberId ? "Edit Anggota" : "Tambah Anggota";
+  document.getElementById("topEyebrow").textContent = editingMemberId ? "Ubah data" : "Data baru";
 }
 function resetAddForm(){
   document.getElementById("addForm").reset();
@@ -1098,6 +1126,17 @@ function startAddSpouse(personId){
   closeModal();
   goTo("tambah");
 }
+function startEditMember(id){
+  const m = getMemberById(id);
+  if(!m) return;
+  resetAddForm();
+  formPreset = Object.assign({}, m, {
+    editId: m.id,
+    bannerText: `Mengedit data ${m.nama_panggilan||m.nama_lengkap}.`
+  });
+  closeModal();
+  goTo("tambah");
+}
 /** Menu aksi singkat saat tombol "+" di kartu pohon silsilah diketuk. */
 function openQuickAddMenu(id){
   const m = getMemberById(id);
@@ -1124,6 +1163,7 @@ function openQuickAddMenu(id){
 /* ---------- Photo picker logic ---------- */
 let selectedPhotoDataUrl = null; // dipakai langsung di mode mock; di produksi diunggah via api.uploadPhoto()
 let selectedPhotoFile = null;
+let existingPhotoUrl = ""; // foto anggota yang sedang diedit (dipakai kalau foto tidak diganti)
 const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 document.getElementById("btnPickPhoto").addEventListener("click", ()=> document.getElementById("f-foto").click());
 document.getElementById("f-foto").addEventListener("change", (e)=>{
@@ -1145,7 +1185,7 @@ document.getElementById("f-foto").addEventListener("change", (e)=>{
 });
 document.getElementById("btnRemovePhoto").addEventListener("click", ()=> resetPhotoPicker());
 function resetPhotoPicker(){
-  selectedPhotoDataUrl = null; selectedPhotoFile = null;
+  selectedPhotoDataUrl = null; selectedPhotoFile = null; existingPhotoUrl = "";
   document.getElementById("f-foto").value = "";
   document.getElementById("photoPreview").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>`;
   document.getElementById("btnRemovePhoto").style.display = "none";
@@ -1154,13 +1194,14 @@ function resetPhotoPicker(){
  * Di produksi (backend GAS asli), foto diunggah dulu ke Google Drive lewat
  * api.uploadPhoto(), lalu URL hasilnya dipakai sebagai field `foto`.
  * Di mode mock (tanpa backend), data URL dipakai langsung sebagai `foto`.
+ * Saat edit tanpa mengganti foto, foto lama (existingPhotoUrl) tetap dipakai.
  */
 async function resolvePhotoForSubmit(){
-  if(!selectedPhotoDataUrl) return "";
+  if(!selectedPhotoDataUrl) return existingPhotoUrl || "";
   if(CONFIG.USE_MOCK) return selectedPhotoDataUrl;
   const base64 = selectedPhotoDataUrl.split(",")[1];
   const res = await api.uploadPhoto(base64, selectedPhotoFile.name, selectedPhotoFile.type);
-  if(!res.success){ toast(res.message || "Gagal mengunggah foto.", "error"); return ""; }
+  if(!res.success){ toast(res.message || "Gagal mengunggah foto.", "error"); return existingPhotoUrl || ""; }
   return res.data.url;
 }
 
@@ -1194,7 +1235,7 @@ document.getElementById("addForm").addEventListener("submit", async (e)=>{
   const btn = document.getElementById("submitBtn");
   btn.disabled = true; btn.textContent = "Mengunggah foto...";
   const fotoUrl = await resolvePhotoForSubmit();
-  btn.textContent = "Menyimpan...";
+  btn.textContent = editingMemberId ? "Menyimpan perubahan..." : "Menyimpan...";
   const payload = {
     foto: fotoUrl,
     nama_lengkap:nama,
@@ -1212,13 +1253,18 @@ document.getElementById("addForm").addEventListener("submit", async (e)=>{
     catatan:document.getElementById("f-catatan").value.trim(),
     father_id:ayah, mother_id:ibu, spouse_id:pasangan
   };
-  const res = await api.addMember(payload);
-  btn.disabled = false; btn.textContent = "Simpan Anggota";
+  const res = editingMemberId
+    ? await api.updateMember(editingMemberId, payload)
+    : await api.addMember(payload);
+  btn.disabled = false;
   if(res.success){
-    toast("Anggota berhasil ditambahkan.");
+    toast(editingMemberId ? "Data berhasil diperbarui." : "Anggota berhasil ditambahkan.");
+    editingMemberId = null;
     resetAddForm();
+    setFormMode();
     goTo("anggota");
   } else {
+    setFormMode();
     toast(res.message || "Terjadi kesalahan.", "error");
   }
 });
@@ -1325,7 +1371,7 @@ function openProfile(id){
     el.addEventListener("click", ()=> openProfile(el.dataset.open));
   });
   document.getElementById("btnViewTree").addEventListener("click", ()=>{ closeModal(); goTo("silsilah"); setTimeout(()=>focusOnMember(id), 60); });
-  document.getElementById("btnEditMember").addEventListener("click", ()=>{ closeModal(); toast("Form edit menggunakan tampilan yang sama dengan Tambah Anggota."); goTo("tambah"); });
+  document.getElementById("btnEditMember").addEventListener("click", ()=>{ startEditMember(id); });
   document.getElementById("btnDeleteMember").addEventListener("click", ()=>{ closeModal(); confirmDelete(id); });
 }
 function closeModal(){ document.getElementById("modalOverlay").classList.remove("active"); }
