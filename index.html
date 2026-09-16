@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Silsilah Keluarga</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F6B55">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Silsilah">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -226,6 +233,22 @@ button{font-family:inherit;}
 .skel-row{height:70px; margin-bottom:9px;}
 .skel-card{height:78px;}
 
+/* ---------- Photo picker ---------- */
+.photo-picker-row{display:flex; align-items:center; gap:14px;}
+.photo-preview{
+  width:64px; height:64px; border-radius:50%; background:var(--primary-tint); color:var(--primary-dark);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; border:1px solid var(--border);
+}
+.photo-preview svg{width:26px; height:26px;}
+.photo-preview img{width:100%; height:100%; object-fit:cover;}
+.photo-picker-actions{display:flex; flex-direction:column; gap:6px; align-items:flex-start;}
+.photo-btn{
+  display:flex; align-items:center; gap:8px; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink); padding:9px 14px; border-radius:99px; font-size:13px; font-weight:600;
+}
+.photo-btn svg{width:16px; height:16px; color:var(--primary);}
+.photo-btn-remove{border:none; background:none; color:var(--danger); font-size:12.5px; font-weight:600; padding:2px 4px;}
+
 /* ---------- Form ---------- */
 .form-group{margin-bottom:14px;}
 .form-group label{display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--ink);}
@@ -333,6 +356,26 @@ button{font-family:inherit;}
 .confirm-actions{display:flex; gap:10px; margin-top:18px;}
 .confirm-actions button{flex:1; border:none; padding:12px; border-radius:var(--radius-md); font-weight:600; font-size:14px;}
 
+/* ---------- Install PWA banner ---------- */
+.install-banner{
+  position:absolute; left:12px; right:12px; bottom:calc(78px + env(safe-area-inset-bottom));
+  z-index:70; background:var(--surface); border-radius:var(--radius-lg); box-shadow:0 12px 30px rgba(0,0,0,.18);
+  padding:14px; display:none; align-items:center; gap:12px;
+  animation:sheet-up .25s ease;
+}
+.install-banner.active{display:flex;}
+.install-icon{
+  width:42px; height:42px; border-radius:12px; background:var(--primary-tint); color:var(--primary-dark);
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.install-icon svg{width:20px; height:20px;}
+.install-text{flex:1; min-width:0;}
+.install-text .t{font-size:13.5px; font-weight:700;}
+.install-text .s{font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.35;}
+.install-actions{display:flex; flex-direction:column; gap:6px; flex-shrink:0;}
+.install-actions button{border:none; background:none; font-size:12.5px; font-weight:700; padding:6px 8px; border-radius:8px; color:var(--muted);}
+.install-actions button.primary{background:var(--primary); color:#fff; padding:7px 14px;}
+
 /* ---------- Toast ---------- */
 .toast-stack{position:absolute; top:14px; left:0; right:0; z-index:80; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none;}
 .toast{
@@ -411,6 +454,23 @@ button{font-family:inherit;}
     <!-- TAMBAH -->
     <section class="screen" id="screen-tambah">
       <form id="addForm">
+        <div class="form-group photo-picker">
+          <label>Foto</label>
+          <div class="photo-picker-row">
+            <div class="photo-preview" id="photoPreview">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+            </div>
+            <div class="photo-picker-actions">
+              <button type="button" class="photo-btn" id="btnPickPhoto">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-2.5h5L16 7"/><circle cx="12" cy="13.5" r="3.5"/></svg>
+                Tambah Foto
+              </button>
+              <button type="button" class="photo-btn-remove" id="btnRemovePhoto" style="display:none;">Hapus foto</button>
+              <input type="file" id="f-foto" accept="image/*" style="display:none;">
+            </div>
+          </div>
+          <p class="hint" id="photoHint">Ukuran foto maksimal 4MB.</p>
+        </div>
         <div class="form-group" id="fg-nama">
           <label>Nama Lengkap <span class="req">*</span></label>
           <input type="text" id="f-nama" placeholder="cth. Ahmad Fauzi">
@@ -536,6 +596,20 @@ button{font-family:inherit;}
   </div>
 
   <div class="toast-stack" id="toastStack"></div>
+
+  <div class="install-banner" id="installBanner">
+    <div class="install-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="12" r="2"/><path d="M12 6.5v2.3M11 8.6 7 10.5M13 8.6l4 1.9"/></svg>
+    </div>
+    <div class="install-text">
+      <div class="t">Instal Silsilah Keluarga</div>
+      <div class="s" id="installSub">Tambahkan ke layar utama untuk akses lebih cepat, kapan saja.</div>
+    </div>
+    <div class="install-actions">
+      <button id="installDismiss">Nanti</button>
+      <button id="installConfirm" class="primary">Instal</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -568,9 +642,20 @@ let nextIdNum = 10;
    fetch() ke GAS, supaya tinggal ganti isi saat backend siap.
    ========================================================= */
 const api = {
-  async getMembers(){ await delay(350); return ok(MEMBERS); },
-  async getMember(id){ await delay(200); const m=MEMBERS.find(x=>x.id===id); return m?ok(m):fail("Anggota tidak ditemukan"); },
+  async getMembers(){
+    if(!CONFIG.USE_MOCK){
+      const res = await gasGet('getMembers');
+      if(res.success) MEMBERS = res.data; // sinkronkan data global dgn Spreadsheet
+      return res;
+    }
+    await delay(350); return ok(MEMBERS);
+  },
+  async getMember(id){
+    if(!CONFIG.USE_MOCK) return gasGet('getMember', {id});
+    await delay(200); const m=MEMBERS.find(x=>x.id===id); return m?ok(m):fail("Anggota tidak ditemukan");
+  },
   async addMember(payload){
+    if(!CONFIG.USE_MOCK) return gasPost({action:'addMember', data:payload});
     await delay(400);
     const id = "F0" + (nextIdNum++).toString().padStart(2,"0");
     const now = new Date().toISOString();
@@ -579,7 +664,16 @@ const api = {
     if(member.spouse_id){ const sp = getMemberById(member.spouse_id); if(sp) sp.spouse_id = member.id; }
     return ok(member);
   },
+  async updateMember(id, data){
+    if(!CONFIG.USE_MOCK) return gasPost({action:'updateMember', id, data});
+    await delay(300);
+    const m = getMemberById(id);
+    if(!m) return fail("Anggota tidak ditemukan");
+    Object.assign(m, data, {updated_at:new Date().toISOString()});
+    return ok(m);
+  },
   async deleteMember(id){
+    if(!CONFIG.USE_MOCK) return gasPost({action:'deleteMember', id});
     await delay(300);
     MEMBERS = MEMBERS.filter(m=>m.id!==id);
     MEMBERS.forEach(m=>{
@@ -589,7 +683,11 @@ const api = {
     });
     return ok(true);
   },
+  async uploadPhoto(base64, fileName, mimeType){
+    return gasPost({action:'uploadPhoto', base64, fileName, mimeType});
+  },
   async getStats(){
+    if(!CONFIG.USE_MOCK) return gasGet('getStats');
     await delay(250);
     const total = MEMBERS.length;
     const laki = MEMBERS.filter(m=>m.jenis_kelamin==="L").length;
@@ -600,6 +698,7 @@ const api = {
     return ok({total, laki, perempuan, genCount, pasangan});
   },
   async searchMembers(q){
+    if(!CONFIG.USE_MOCK) return gasGet('searchMembers', {q});
     await delay(300);
     q = q.trim().toLowerCase();
     if(!q) return ok([]);
@@ -617,6 +716,35 @@ const api = {
 function ok(data){ return {success:true, message:"OK", data}; }
 function fail(message){ return {success:false, message, data:null}; }
 function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/**
+ * gasGet/gasPost — dipakai hanya saat CONFIG.USE_MOCK = false.
+ * POST dikirim dgn Content-Type "text/plain" supaya tidak memicu
+ * preflight CORS OPTIONS (GAS Web App tidak bisa membalas preflight).
+ */
+async function gasGet(action, params){
+  try{
+    const url = new URL(CONFIG.API_URL);
+    url.searchParams.set('action', action);
+    Object.entries(params||{}).forEach(([k,v])=>{ if(v!==undefined && v!==null) url.searchParams.set(k, v); });
+    const res = await fetch(url.toString());
+    return await res.json();
+  }catch(err){
+    return fail("Data belum dapat dimuat. Periksa koneksi atau URL_API di CONFIG.");
+  }
+}
+async function gasPost(body){
+  try{
+    const res = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: {'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(body)
+    });
+    return await res.json();
+  }catch(err){
+    return fail("Terjadi kesalahan. Periksa koneksi atau URL_API di CONFIG.");
+  }
+}
 
 /* =========================================================
    UTILS — relasi keluarga & generasi
@@ -667,7 +795,14 @@ function fmtDate(s){
 function avatarHTML(m, size){
   const cls = "avatar g-" + m.jenis_kelamin + (m.status_hidup==="Wafat" ? " deceased":"");
   const s = size || 44;
-  return `<div class="${cls}" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.34)}px;">${initials(m.nama_lengkap)}</div>`;
+  const inits = initials(m.nama_lengkap);
+  if(m.foto){
+    return `<div class="${cls}" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.34)}px;">
+      <img src="${m.foto}" alt="${m.nama_lengkap}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"
+        onerror="this.parentElement.innerHTML='${inits}';">
+    </div>`;
+  }
+  return `<div class="${cls}" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.34)}px;">${inits}</div>`;
 }
 function icon(name, extra){
   const paths = {
@@ -834,12 +969,56 @@ function emptyStateHTML(title, sub, showRetry){
 /* =========================================================
    TAMBAH ANGGOTA — form + validasi
    ========================================================= */
-function populateFamilySelects(){
+async function populateFamilySelects(){
+  if(!CONFIG.USE_MOCK) await api.getMembers(); // sinkronkan MEMBERS dgn Spreadsheet
   const opts = MEMBERS.map(m=>`<option value="${m.id}">${m.nama_lengkap} (${m.nama_panggilan||m.id})</option>`).join("");
   document.getElementById("f-ayah").innerHTML = `<option value="">Tidak ada / tidak diketahui</option>` + MEMBERS.filter(m=>m.jenis_kelamin==="L").map(m=>`<option value="${m.id}">${m.nama_lengkap}</option>`).join("");
   document.getElementById("f-ibu").innerHTML = `<option value="">Tidak ada / tidak diketahui</option>` + MEMBERS.filter(m=>m.jenis_kelamin==="P").map(m=>`<option value="${m.id}">${m.nama_lengkap}</option>`).join("");
   document.getElementById("f-pasangan").innerHTML = `<option value="">Tidak ada / belum menikah</option>` + opts;
 }
+/* ---------- Photo picker logic ---------- */
+let selectedPhotoDataUrl = null; // dipakai langsung di mode mock; di produksi diunggah via api.uploadPhoto()
+let selectedPhotoFile = null;
+const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
+document.getElementById("btnPickPhoto").addEventListener("click", ()=> document.getElementById("f-foto").click());
+document.getElementById("f-foto").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  if(file.size > MAX_PHOTO_BYTES){
+    toast("Ukuran foto maksimal 4MB.", "error");
+    e.target.value = "";
+    return;
+  }
+  selectedPhotoFile = file;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    selectedPhotoDataUrl = ev.target.result;
+    document.getElementById("photoPreview").innerHTML = `<img src="${selectedPhotoDataUrl}" alt="Pratinjau foto">`;
+    document.getElementById("btnRemovePhoto").style.display = "inline-block";
+  };
+  reader.readAsDataURL(file);
+});
+document.getElementById("btnRemovePhoto").addEventListener("click", ()=> resetPhotoPicker());
+function resetPhotoPicker(){
+  selectedPhotoDataUrl = null; selectedPhotoFile = null;
+  document.getElementById("f-foto").value = "";
+  document.getElementById("photoPreview").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>`;
+  document.getElementById("btnRemovePhoto").style.display = "none";
+}
+/**
+ * Di produksi (backend GAS asli), foto diunggah dulu ke Google Drive lewat
+ * api.uploadPhoto(), lalu URL hasilnya dipakai sebagai field `foto`.
+ * Di mode mock (tanpa backend), data URL dipakai langsung sebagai `foto`.
+ */
+async function resolvePhotoForSubmit(){
+  if(!selectedPhotoDataUrl) return "";
+  if(CONFIG.USE_MOCK) return selectedPhotoDataUrl;
+  const base64 = selectedPhotoDataUrl.split(",")[1];
+  const res = await api.uploadPhoto(base64, selectedPhotoFile.name, selectedPhotoFile.type);
+  if(!res.success){ toast(res.message || "Gagal mengunggah foto.", "error"); return ""; }
+  return res.data.url;
+}
+
 document.getElementById("f-status").addEventListener("change", (e)=>{
   document.getElementById("fg-wafat").style.display = e.target.value==="Wafat" ? "block" : "none";
 });
@@ -868,8 +1047,11 @@ document.getElementById("addForm").addEventListener("submit", async (e)=>{
   if(!valid){ toast("Periksa kembali data yang diisi.", "error"); return; }
 
   const btn = document.getElementById("submitBtn");
-  btn.disabled = true; btn.textContent = "Menyimpan...";
+  btn.disabled = true; btn.textContent = "Mengunggah foto...";
+  const fotoUrl = await resolvePhotoForSubmit();
+  btn.textContent = "Menyimpan...";
   const payload = {
+    foto: fotoUrl,
     nama_lengkap:nama,
     nama_panggilan:document.getElementById("f-panggilan").value.trim(),
     jenis_kelamin:gender,
@@ -891,6 +1073,7 @@ document.getElementById("addForm").addEventListener("submit", async (e)=>{
     toast("Anggota berhasil ditambahkan.");
     document.getElementById("addForm").reset();
     document.getElementById("fg-wafat").style.display = "none";
+    resetPhotoPicker();
     goTo("anggota");
   } else {
     toast(res.message || "Terjadi kesalahan.", "error");
@@ -1078,7 +1261,8 @@ function layoutUnit(unit, depth){
 }
 function flattenUnits(unit, out){ out.push(unit); (TREE.collapsed.has(unit.id)?[]:unit.children).forEach(c=>flattenUnits(c,out)); return out; }
 
-function renderTree(){
+async function renderTree(){
+  if(!CONFIG.USE_MOCK) await api.getMembers(); // sinkronkan MEMBERS dgn Spreadsheet
   const forest = buildForest();
   leafCounter = 0;
   forest.forEach((u,i)=>{ layoutUnit(u,0); leafCounter += 1; });
@@ -1163,11 +1347,28 @@ function personCard(m, x, y, unitId){
   circle.setAttribute("fill", m.jenis_kelamin==="L" ? "#0F6B55" : "#8A5A78");
   circle.setAttribute("opacity", m.status_hidup==="Wafat" ? "0.55" : "1");
   grp.appendChild(circle);
-  const initEl = document.createElementNS("http://www.w3.org/2000/svg","text");
-  initEl.setAttribute("x","48"); initEl.setAttribute("y","29"); initEl.setAttribute("text-anchor","middle");
-  initEl.setAttribute("fill","#fff"); initEl.setAttribute("font-size","11"); initEl.setAttribute("font-weight","700");
-  initEl.textContent = initials(m.nama_lengkap);
-  grp.appendChild(initEl);
+  if(m.foto){
+    const clipId = "clip-" + unitId + "-" + m.id;
+    const defs = document.createElementNS("http://www.w3.org/2000/svg","defs");
+    const clip = document.createElementNS("http://www.w3.org/2000/svg","clipPath");
+    clip.setAttribute("id", clipId);
+    const clipCircle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    clipCircle.setAttribute("cx","48"); clipCircle.setAttribute("cy","24"); clipCircle.setAttribute("r","16");
+    clip.appendChild(clipCircle); defs.appendChild(clip); grp.appendChild(defs);
+    const img = document.createElementNS("http://www.w3.org/2000/svg","image");
+    img.setAttributeNS("http://www.w3.org/1999/xlink","href", m.foto);
+    img.setAttribute("href", m.foto);
+    img.setAttribute("x","32"); img.setAttribute("y","8"); img.setAttribute("width","32"); img.setAttribute("height","32");
+    img.setAttribute("clip-path", `url(#${clipId})`);
+    img.setAttribute("preserveAspectRatio","xMidYMid slice");
+    grp.appendChild(img);
+  } else {
+    const initEl = document.createElementNS("http://www.w3.org/2000/svg","text");
+    initEl.setAttribute("x","48"); initEl.setAttribute("y","29"); initEl.setAttribute("text-anchor","middle");
+    initEl.setAttribute("fill","#fff"); initEl.setAttribute("font-size","11"); initEl.setAttribute("font-weight","700");
+    initEl.textContent = initials(m.nama_lengkap);
+    grp.appendChild(initEl);
+  }
   const nameEl = document.createElementNS("http://www.w3.org/2000/svg","text");
   nameEl.setAttribute("class","name"); nameEl.setAttribute("x","48"); nameEl.setAttribute("y","54");
   nameEl.setAttribute("text-anchor","middle"); nameEl.setAttribute("font-size","10.5");
@@ -1222,6 +1423,77 @@ document.getElementById("btnFullscreen").addEventListener("click", ()=>{
   wrap.addEventListener("touchstart", e=>{ const t=e.touches[0]; start(t.clientX,t.clientY); }, {passive:true});
   wrap.addEventListener("touchmove", e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); }, {passive:true});
   wrap.addEventListener("touchend", end);
+})();
+
+/* =========================================================
+   PWA — service worker + notifikasi instal ke layar utama
+   ========================================================= */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{
+      // Diam-diam gagal jika sw.js belum tersedia (mis. saat pratinjau lokal
+      // tanpa deploy penuh) — tidak memengaruhi fungsi utama aplikasi.
+    });
+  });
+}
+
+const INSTALL_DISMISS_KEY = "silsilah_install_dismissed_at";
+const INSTALL_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // jangan tampilkan lagi selama 7 hari setelah ditutup
+let deferredInstallPrompt = null;
+
+function isRunningStandalone(){
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+function wasRecentlyDismissed(){
+  const t = Number(localStorage.getItem(INSTALL_DISMISS_KEY) || 0);
+  return (Date.now() - t) < INSTALL_COOLDOWN_MS;
+}
+function showInstallBanner(subtext){
+  if(isRunningStandalone() || wasRecentlyDismissed()) return;
+  if(subtext) document.getElementById("installSub").textContent = subtext;
+  document.getElementById("installBanner").classList.add("active");
+}
+function hideInstallBanner(){
+  document.getElementById("installBanner").classList.remove("active");
+}
+document.getElementById("installDismiss").addEventListener("click", ()=>{
+  localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
+  hideInstallBanner();
+});
+document.getElementById("installConfirm").addEventListener("click", async ()=>{
+  if(deferredInstallPrompt){
+    hideInstallBanner();
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    if(choice.outcome !== "accepted"){
+      localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
+    }
+  } else {
+    // iOS Safari tidak punya prompt otomatis — tampilkan instruksi manual.
+    hideInstallBanner();
+    toast("Ketuk tombol Bagikan lalu pilih \"Tambah ke Layar Utama\".");
+  }
+});
+
+// Chrome/Edge/Android: event ini menandakan halaman memenuhi syarat utk diinstal.
+window.addEventListener("beforeinstallprompt", (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  setTimeout(()=> showInstallBanner("Tambahkan ke layar utama untuk akses lebih cepat, kapan saja."), 1200);
+});
+window.addEventListener("appinstalled", ()=>{
+  hideInstallBanner();
+  deferredInstallPrompt = null;
+  toast("Aplikasi berhasil diinstal.");
+});
+
+// iOS Safari tidak mendukung beforeinstallprompt — deteksi manual & beri instruksi.
+(function checkIosInstall(){
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(isIos && !isRunningStandalone()){
+    setTimeout(()=> showInstallBanner("Ketuk ikon Bagikan di Safari, lalu pilih \"Tambah ke Layar Utama\"."), 1500);
+  }
 })();
 
 /* =========================================================
