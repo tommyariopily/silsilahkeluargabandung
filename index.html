@@ -1417,19 +1417,24 @@ const TREE = { scale:1, tx:40, ty:40, collapsed:new Set(), focusId:null };
 const NODE_W_SINGLE = 116, NODE_W_PAIR = 210, NODE_H = 78, GAP_X = 46, GAP_Y = 110;
 
 function buildForest(){
-  const visited = new Set();
-  const roots = MEMBERS.filter(m => !m.father_id && !m.mother_id && !visited.has(m.id) && !(m.spouse_id && visited.has(m.spouse_id)));
+  const placed = new Set(); // seluruh id yang sudah tampil sbg kartu, di cabang manapun
+  const roots = MEMBERS.filter(m => !m.father_id && !m.mother_id);
   const rootUnits = [];
-  const rootIdsUsed = new Set();
   roots.forEach(m=>{
-    if(rootIdsUsed.has(m.id)) return;
+    if(placed.has(m.id)) return; // sudah tampil (mis. sbg pasangan root lain)
     const spouse = getSpouse(m);
-    rootIdsUsed.add(m.id); if(spouse) rootIdsUsed.add(spouse.id);
-    rootUnits.push(buildUnit(m, spouse, new Set()));
+    const unit = buildUnit(m, spouse, new Set(), placed);
+    if(unit) rootUnits.push(unit);
   });
   return rootUnits;
 }
-function buildUnit(primary, spouse, ancestry){
+function buildUnit(primary, spouse, ancestry, placed){
+  // Pasangan yang menikah "masuk" dari cabang keluarga lain akan tampil di
+  // cabang orang tuanya sendiri lebih dulu — cabang pasangannya cukup
+  // berhenti di sini agar tidak muncul dua kali di pohon yang sama.
+  if(placed.has(primary.id) || (spouse && placed.has(spouse.id))) return null;
+  placed.add(primary.id); if(spouse) placed.add(spouse.id);
+
   const unit = { id: primary.id + (spouse?("_"+spouse.id):""), members: spouse? [primary,spouse] : [primary], children: [] };
   const childIds = new Set();
   getChildren(primary.id).forEach(c=>childIds.add(c.id));
@@ -1440,7 +1445,8 @@ function buildUnit(primary, spouse, ancestry){
     const child = getMemberById(cid);
     if(!child) return;
     const childSpouse = getSpouse(child);
-    unit.children.push(buildUnit(child, childSpouse, newAncestry));
+    const childUnit = buildUnit(child, childSpouse, newAncestry, placed);
+    if(childUnit) unit.children.push(childUnit);
   });
   return unit;
 }
