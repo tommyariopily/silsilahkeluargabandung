@@ -1470,6 +1470,30 @@ function layoutUnit(unit, depth){
     unit.x = (visibleChildren[0].x + visibleChildren[visibleChildren.length-1].x)/2;
   }
 }
+/**
+ * Pass kedua: samakan jarak antar-SAUDARA di satu level (sama seperti jarak
+ * antar saudara yang sama-sama tidak punya keturunan), lalu geser seluruh
+ * cabang keturunan sbg satu blok utuh mengikuti pergeseran itu — supaya
+ * kartu yang sedang menampilkan anak tidak "menjauhkan" saudaranya sendiri.
+ */
+function equalizeAndShift(units){
+  if(!units || units.length===0) return;
+  const baseX = units[0].x;
+  units.forEach((u,i)=>{
+    const desiredX = baseX + i;
+    const delta = desiredX - u.x;
+    if(delta !== 0) shiftSubtree(u, delta);
+  });
+  units.forEach(u=>{
+    const visibleChildren = TREE.collapsed.has(u.id) ? [] : u.children;
+    equalizeAndShift(visibleChildren);
+  });
+}
+function shiftSubtree(unit, delta){
+  unit.x += delta;
+  const visibleChildren = TREE.collapsed.has(unit.id) ? [] : unit.children;
+  visibleChildren.forEach(c=>shiftSubtree(c, delta));
+}
 function flattenUnits(unit, out){ out.push(unit); (TREE.collapsed.has(unit.id)?[]:unit.children).forEach(c=>flattenUnits(c,out)); return out; }
 
 async function renderTree(){
@@ -1477,6 +1501,7 @@ async function renderTree(){
   const forest = buildForest();
   leafCounter = 0;
   forest.forEach((u,i)=>{ layoutUnit(u,0); leafCounter += 1; });
+  equalizeAndShift(forest);
   let allUnits = [];
   forest.forEach(u=>flattenUnits(u, allUnits));
 
