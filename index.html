@@ -264,6 +264,18 @@ button{font-family:inherit;}
 .form-row{display:flex; gap:10px;}
 .form-row .form-group{flex:1;}
 .form-divider{margin:22px 0 14px; font-size:13.5px; font-weight:600; color:var(--muted); border-top:1px solid var(--border); padding-top:16px;}
+.form-context-banner{
+  display:flex; align-items:center; gap:10px; background:var(--primary-tint); color:var(--primary-dark);
+  padding:11px 14px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; margin-bottom:16px;
+}
+.form-context-banner svg{width:16px; height:16px; flex-shrink:0;}
+.quick-add-row{display:flex; gap:8px; justify-content:center; margin:2px 0 18px; flex-wrap:wrap;}
+.quick-add-chip{
+  display:flex; align-items:center; gap:6px; border:1px solid var(--primary); background:var(--primary-tint);
+  color:var(--primary-dark); padding:8px 14px; border-radius:99px; font-size:12.5px; font-weight:600;
+}
+.quick-add-chip svg{width:14px; height:14px;}
+.quick-add-list{display:flex; flex-direction:column; gap:8px; margin-top:14px;}
 .submit-btn{
   width:100%; border:none; background:var(--primary); color:#fff; padding:14px; border-radius:var(--radius-md);
   font-size:15px; font-weight:600; margin-top:6px; box-shadow:0 6px 16px rgba(15,107,85,.28);
@@ -296,6 +308,7 @@ button{font-family:inherit;}
 .spouse-link{stroke:#B9C6BF; stroke-width:1.6;}
 .toggle-btn circle{fill:var(--surface); stroke:var(--border);}
 .toggle-btn text{fill:var(--muted); font-size:11px; font-weight:700; font-family:'Inter',sans-serif;}
+.card-add-btn{cursor:pointer;}
 
 /* ---------- Modal ---------- */
 .modal-overlay{
@@ -454,6 +467,7 @@ button{font-family:inherit;}
     <!-- TAMBAH -->
     <section class="screen" id="screen-tambah">
       <form id="addForm">
+        <div class="form-context-banner" id="formContextBanner" style="display:none;"></div>
         <div class="form-group photo-picker">
           <label>Foto</label>
           <div class="photo-picker-row">
@@ -617,8 +631,8 @@ button{font-family:inherit;}
    CONFIG  (siap disambungkan ke Google Apps Script Web App)
    ========================================================= */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzayiaibNuQjZfOOkZBlFVj9EkaEj6SE1wDZqxp8ui07XuZmRGfCMxoSDhVxFeWXCO9/exec", // ganti dengan URL deploy GAS
-  USE_MOCK: false                    // set false setelah backend GAS siap
+  API_URL: "YOUR_GAS_WEB_APP_URL", // ganti dengan URL deploy GAS
+  USE_MOCK: true                    // set false setelah backend GAS siap
 };
 
 /* =========================================================
@@ -908,7 +922,7 @@ function goTo(name){
   if(name==="dashboard") renderDashboard();
   if(name==="silsilah") renderTree();
   if(name==="anggota") renderMembers();
-  if(name==="tambah") { populateFamilySelects(); }
+  if(name==="tambah") { applyFormPreset(); }
   if(name==="cari") { document.getElementById("searchInput").focus(); }
 }
 document.querySelectorAll("[data-nav]").forEach(el=>{
@@ -1028,6 +1042,85 @@ async function populateFamilySelects(){
   document.getElementById("f-ibu").innerHTML = `<option value="">Tidak ada / tidak diketahui</option>` + MEMBERS.filter(m=>m.jenis_kelamin==="P").map(m=>`<option value="${m.id}">${m.nama_lengkap}</option>`).join("");
   document.getElementById("f-pasangan").innerHTML = `<option value="">Tidak ada / belum menikah</option>` + opts;
 }
+
+/* ---------- Tambah Anak / Tambah Pasangan dari kartu keluarga ---------- */
+let formPreset = null; // diisi oleh startAddChild()/startAddSpouse(), dibaca sekali oleh applyFormPreset()
+
+function showFormBanner(text){
+  const el = document.getElementById("formContextBanner");
+  el.innerHTML = `${icon("users2")}<span>${text}</span>`;
+  el.style.display = "flex";
+}
+function hideFormBanner(){
+  const el = document.getElementById("formContextBanner");
+  el.style.display = "none";
+  el.innerHTML = "";
+}
+async function applyFormPreset(){
+  await populateFamilySelects();
+  hideFormBanner();
+  if(!formPreset) return;
+  const p = formPreset; formPreset = null;
+  if(p.father_id) document.getElementById("f-ayah").value = p.father_id;
+  if(p.mother_id) document.getElementById("f-ibu").value = p.mother_id;
+  if(p.spouse_id) document.getElementById("f-pasangan").value = p.spouse_id;
+  if(p.jenis_kelamin) document.getElementById("f-gender").value = p.jenis_kelamin;
+  if(p.bannerText) showFormBanner(p.bannerText);
+}
+function resetAddForm(){
+  document.getElementById("addForm").reset();
+  document.getElementById("fg-wafat").style.display = "none";
+  resetPhotoPicker();
+  hideFormBanner();
+}
+function startAddChild(parentId){
+  const parent = getMemberById(parentId);
+  if(!parent) return;
+  const spouse = getSpouse(parent);
+  resetAddForm();
+  formPreset = {
+    bannerText: `Menambahkan anak dari ${parent.nama_panggilan||parent.nama_lengkap}${spouse ? ' & '+(spouse.nama_panggilan||spouse.nama_lengkap) : ''}.`
+  };
+  if(parent.jenis_kelamin === "L"){ formPreset.father_id = parent.id; if(spouse) formPreset.mother_id = spouse.id; }
+  else { formPreset.mother_id = parent.id; if(spouse) formPreset.father_id = spouse.id; }
+  closeModal();
+  goTo("tambah");
+}
+function startAddSpouse(personId){
+  const person = getMemberById(personId);
+  if(!person) return;
+  resetAddForm();
+  formPreset = {
+    spouse_id: person.id,
+    jenis_kelamin: person.jenis_kelamin === "L" ? "P" : "L",
+    bannerText: `Menambahkan pasangan untuk ${person.nama_panggilan||person.nama_lengkap}.`
+  };
+  closeModal();
+  goTo("tambah");
+}
+/** Menu aksi singkat saat tombol "+" di kartu pohon silsilah diketuk. */
+function openQuickAddMenu(id){
+  const m = getMemberById(id);
+  if(!m) return;
+  const sheet = document.getElementById("modalSheet");
+  sheet.innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="confirm-box" style="text-align:left;">
+      <h3 style="text-align:center;">Tambah untuk ${m.nama_panggilan||m.nama_lengkap}</h3>
+      <div class="quick-add-list">
+        <button class="qa-btn" id="qaAddChild"><span class="ic">${icon("users2")}</span> Tambah Anak</button>
+        ${!m.spouse_id ? `<button class="qa-btn" id="qaAddSpouse"><span class="ic">${icon("heart")}</span> Tambah Pasangan</button>` : ''}
+      </div>
+      <button class="btn-outline" id="qaCancel" style="width:100%; margin-top:14px;">Batal</button>
+    </div>
+  `;
+  document.getElementById("modalOverlay").classList.add("active");
+  document.getElementById("qaAddChild").addEventListener("click", ()=> startAddChild(id));
+  const spouseBtn = document.getElementById("qaAddSpouse");
+  if(spouseBtn) spouseBtn.addEventListener("click", ()=> startAddSpouse(id));
+  document.getElementById("qaCancel").addEventListener("click", closeModal);
+}
+
 /* ---------- Photo picker logic ---------- */
 let selectedPhotoDataUrl = null; // dipakai langsung di mode mock; di produksi diunggah via api.uploadPhoto()
 let selectedPhotoFile = null;
@@ -1123,9 +1216,7 @@ document.getElementById("addForm").addEventListener("submit", async (e)=>{
   btn.disabled = false; btn.textContent = "Simpan Anggota";
   if(res.success){
     toast("Anggota berhasil ditambahkan.");
-    document.getElementById("addForm").reset();
-    document.getElementById("fg-wafat").style.display = "none";
-    resetPhotoPicker();
+    resetAddForm();
     goTo("anggota");
   } else {
     toast(res.message || "Terjadi kesalahan.", "error");
@@ -1195,6 +1286,10 @@ function openProfile(id){
       <div class="sub">${m.nama_panggilan || ''} &middot; Generasi ${gens[m.id]}</div>
       <span class="status-pill ${m.status_hidup==='Hidup'?'hidup':'wafat'}">${m.status_hidup==='Hidup' ? '● Hidup' : 'Almarhum/ah'}</span>
     </div>
+    <div class="quick-add-row">
+      <button class="quick-add-chip" id="btnQuickAddChild">${icon("users2")} Tambah Anak</button>
+      ${!spouse ? `<button class="quick-add-chip" id="btnQuickAddSpouse">${icon("heart")} Tambah Pasangan</button>` : ''}
+    </div>
     <div class="info-list">
       <div class="info-item"><span class="ic">${icon("mapPin")}</span><div class="txt"><div class="l">Tempat &amp; Tanggal Lahir</div><div class="v">${m.tempat_lahir || '-'}, ${fmtDate(m.tanggal_lahir)}${age!==null?` (usia ${age})`:''}</div></div></div>
       ${m.status_hidup==='Wafat' ? `<div class="info-item"><span class="ic">${icon("calendar")}</span><div class="txt"><div class="l">Tanggal Wafat</div><div class="v">${fmtDate(m.tanggal_wafat)}</div></div></div>` : ''}
@@ -1223,6 +1318,9 @@ function openProfile(id){
   `;
   document.getElementById("modalOverlay").classList.add("active");
   document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+  document.getElementById("btnQuickAddChild").addEventListener("click", ()=> startAddChild(id));
+  const quickSpouseBtn = document.getElementById("btnQuickAddSpouse");
+  if(quickSpouseBtn) quickSpouseBtn.addEventListener("click", ()=> startAddSpouse(id));
   document.querySelectorAll("#modalSheet [data-open]").forEach(el=>{
     el.addEventListener("click", ()=> openProfile(el.dataset.open));
   });
@@ -1431,6 +1529,14 @@ function personCard(m, x, y, unitId){
   subEl.setAttribute("text-anchor","middle"); subEl.setAttribute("font-size","9");
   subEl.textContent = (m.tanggal_lahir ? new Date(m.tanggal_lahir).getFullYear() : "?") + (m.status_hidup==="Wafat" ? " ✝" : "");
   grp.appendChild(subEl);
+
+  const addBtn = document.createElementNS("http://www.w3.org/2000/svg","g");
+  addBtn.setAttribute("class","card-add-btn");
+  addBtn.setAttribute("transform","translate(87,9)");
+  addBtn.innerHTML = `<circle r="9" fill="#0F6B55" stroke="#fff" stroke-width="1.6"/><path d="M-3.5 0h7M0 -3.5v7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>`;
+  addBtn.addEventListener("click", (e)=>{ e.stopPropagation(); openQuickAddMenu(m.id); });
+  grp.appendChild(addBtn);
+
   return grp;
 }
 function truncate(s,n){ return s.length>n ? s.slice(0,n-1)+"…" : s; }
