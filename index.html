@@ -1163,30 +1163,64 @@ function openQuickAddMenu(id){
 
 /* ---------- Photo picker logic ---------- */
 let selectedPhotoDataUrl = null; // dipakai langsung di mode mock; di produksi diunggah via api.uploadPhoto()
-let selectedPhotoFile = null;
+let selectedPhotoMime = "image/jpeg";
 let existingPhotoUrl = ""; // foto anggota yang sedang diedit (dipakai kalau foto tidak diganti)
-const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
+const MAX_RAW_PHOTO_BYTES = 20 * 1024 * 1024; // batas file mentah sebelum dikompres (kamera HP bisa 5-10MB)
+const PHOTO_MAX_DIMENSION = 1280; // px, sisi terpanjang setelah dikompres
+const PHOTO_QUALITY = 0.82;
 document.getElementById("btnPickPhoto").addEventListener("click", ()=> document.getElementById("f-foto").click());
 document.getElementById("f-foto").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  if(file.size > MAX_PHOTO_BYTES){
-    toast("Ukuran foto maksimal 4MB.", "error");
+  if(!file.type.startsWith("image/")){
+    toast("File harus berupa gambar.", "error");
     e.target.value = "";
     return;
   }
-  selectedPhotoFile = file;
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    selectedPhotoDataUrl = ev.target.result;
-    document.getElementById("photoPreview").innerHTML = `<img src="${selectedPhotoDataUrl}" alt="Pratinjau foto">`;
+  if(file.size > MAX_RAW_PHOTO_BYTES){
+    toast("Ukuran foto terlalu besar. Coba pilih foto lain.", "error");
+    e.target.value = "";
+    return;
+  }
+  compressImageFile(file, PHOTO_MAX_DIMENSION, PHOTO_QUALITY).then(dataUrl=>{
+    selectedPhotoDataUrl = dataUrl;
+    selectedPhotoMime = "image/jpeg";
+    document.getElementById("photoPreview").innerHTML = `<img src="${dataUrl}" alt="Pratinjau foto">`;
     document.getElementById("btnRemovePhoto").style.display = "inline-block";
-  };
-  reader.readAsDataURL(file);
+  }).catch(()=>{
+    toast("Gagal memproses foto ini. Coba foto lain.", "error");
+    e.target.value = "";
+  });
 });
+/** Perkecil & kompres foto di browser HP dulu (kamera HP sering 3-10MB) sebelum diunggah, supaya jarang gagal karena ukuran. */
+function compressImageFile(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if(w > maxDim || h > maxDim){
+          if(w >= h){ h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        try{ resolve(canvas.toDataURL("image/jpeg", quality)); }
+        catch(err){ reject(err); }
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 document.getElementById("btnRemovePhoto").addEventListener("click", ()=> resetPhotoPicker());
 function resetPhotoPicker(){
-  selectedPhotoDataUrl = null; selectedPhotoFile = null; existingPhotoUrl = "";
+  selectedPhotoDataUrl = null; existingPhotoUrl = "";
   document.getElementById("f-foto").value = "";
   document.getElementById("photoPreview").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>`;
   document.getElementById("btnRemovePhoto").style.display = "none";
@@ -1201,7 +1235,7 @@ async function resolvePhotoForSubmit(){
   if(!selectedPhotoDataUrl) return existingPhotoUrl || "";
   if(CONFIG.USE_MOCK) return selectedPhotoDataUrl;
   const base64 = selectedPhotoDataUrl.split(",")[1];
-  const res = await api.uploadPhoto(base64, selectedPhotoFile.name, selectedPhotoFile.type);
+  const res = await api.uploadPhoto(base64, "foto-" + Date.now() + ".jpg", selectedPhotoMime);
   if(!res.success){ toast(res.message || "Gagal mengunggah foto.", "error"); return existingPhotoUrl || ""; }
   return res.data.url;
 }
@@ -1476,17 +1510,61 @@ function layoutUnit(unit, depth){
  * cabang keturunan sbg satu blok utuh mengikuti pergeseran itu — supaya
  * kartu yang sedang menampilkan anak tidak "menjauhkan" saudaranya sendiri.
  */
-function equalizeAndShift(units){
+/**
+ * Pass kedua: rapatkan jarak antar-SAUDARA di satu level SEAMAN mungkin —
+ * pakai kontur (bentuk sebenarnya) tiap cabang, bukan sekadar indeks. Kalau
+ * dua saudara SAMA-SAMA punya keturunan yang berdekatan, jaraknya tetap
+ * dilebarkan seperlunya (supaya cucu-cucunya tidak tabrakan); kalau
+ * tetangganya "kosong" (tidak ada keturunan), jaraknya dirapatkan penuh.
+ */
+function computeContour(unit){
+  const vc = TREE.collapsed.has(unit.id) ? [] : unit.children;
+  if(vc.length===0){ unit.contourLeft=[0]; unit.contourRight=[0]; return; }
+  vc.forEach(c=>computeContour(c));
+  const leftContour=[0], rightContour=[0];
+  const maxDepth = Math.max(...vc.map(c=>c.contourLeft.length));
+  for(let d=0; d<maxDepth; d++){
+    let minL=Infinity, maxR=-Infinity;
+    vc.forEach(c=>{
+      if(d<c.contourLeft.length){
+        minL = Math.min(minL, (c.x - unit.x) + c.contourLeft[d]);
+        maxR = Math.max(maxR, (c.x - unit.x) + c.contourRight[d]);
+      }
+    });
+    leftContour.push(minL); rightContour.push(maxR);
+  }
+  unit.contourLeft = leftContour; unit.contourRight = rightContour;
+}
+function compactSiblings(units){
   if(!units || units.length===0) return;
-  const baseX = units[0].x;
-  units.forEach((u,i)=>{
-    const desiredX = baseX + i;
-    const delta = desiredX - u.x;
-    if(delta !== 0) shiftSubtree(u, delta);
+  units.forEach(u=>computeContour(u));
+  let mergedRight = null;
+  units.forEach((u, idx)=>{
+    if(idx===0){
+      mergedRight = u.contourRight.map(v=> u.x + v);
+    } else {
+      let desiredX = units[idx-1].x + 1; // jarak minimum antar kartu di baris yg sama
+      const overlapLen = Math.min(mergedRight.length, u.contourLeft.length);
+      for(let d=0; d<overlapLen; d++){
+        const need = mergedRight[d] + 1 - u.contourLeft[d];
+        if(need > desiredX) desiredX = need;
+      }
+      const delta = desiredX - u.x;
+      if(delta !== 0) shiftSubtree(u, delta);
+      const newAbsRight = u.contourRight.map(v=> u.x + v);
+      const maxLen = Math.max(mergedRight.length, newAbsRight.length);
+      const merged = [];
+      for(let d=0; d<maxLen; d++){
+        const a = d<mergedRight.length ? mergedRight[d] : -Infinity;
+        const b = d<newAbsRight.length ? newAbsRight[d] : -Infinity;
+        merged.push(Math.max(a,b));
+      }
+      mergedRight = merged;
+    }
   });
   units.forEach(u=>{
-    const visibleChildren = TREE.collapsed.has(u.id) ? [] : u.children;
-    equalizeAndShift(visibleChildren);
+    const vc = TREE.collapsed.has(u.id) ? [] : u.children;
+    compactSiblings(vc);
   });
 }
 function shiftSubtree(unit, delta){
@@ -1501,12 +1579,14 @@ async function renderTree(){
   const forest = buildForest();
   leafCounter = 0;
   forest.forEach((u,i)=>{ layoutUnit(u,0); leafCounter += 1; });
-  equalizeAndShift(forest);
+  compactSiblings(forest);
   let allUnits = [];
   forest.forEach(u=>flattenUnits(u, allUnits));
 
   const unitWidth = 190;
-  const totalW = Math.max(leafCounter * unitWidth + 80, 400);
+  const xs = allUnits.map(u=>u.x);
+  const minX = Math.min(0, ...xs), maxX = Math.max(0, ...xs);
+  const totalW = Math.max((maxX - minX + 1) * unitWidth + 80, 400);
   const maxDepth = Math.max(...allUnits.map(u=>u.depth), 0);
   const totalH = (maxDepth+1) * (NODE_H+GAP_Y) + 80;
 
@@ -1523,11 +1603,11 @@ async function renderTree(){
   allUnits.forEach(u=>{
     const visibleChildren = TREE.collapsed.has(u.id) ? [] : u.children;
     if(visibleChildren.length===0) return;
-    const px = 40 + u.x*unitWidth + unitWidth/2;
+    const px = 40 + (u.x - minX)*unitWidth + unitWidth/2;
     const py = 40 + u.depth*(NODE_H+GAP_Y) + NODE_H;
     const midY = py + GAP_Y/2;
     visibleChildren.forEach(c=>{
-      const cx = 40 + c.x*unitWidth + unitWidth/2;
+      const cx = 40 + (c.x - minX)*unitWidth + unitWidth/2;
       const cy = 40 + c.depth*(NODE_H+GAP_Y);
       const path = document.createElementNS("http://www.w3.org/2000/svg","path");
       path.setAttribute("class","tree-link");
@@ -1539,7 +1619,7 @@ async function renderTree(){
   // posisi kartu tiap orang (dipakai utk menggambar garis lintas-cabang di bawah)
   const memberPos = {};
   allUnits.forEach(u=>{
-    const baseX = 40 + u.x*unitWidth;
+    const baseX = 40 + (u.x - minX)*unitWidth;
     const baseY = 40 + u.depth*(NODE_H+GAP_Y);
     if(u.members.length===2){
       memberPos[u.members[0].id] = { x: baseX, y: baseY };
@@ -1557,7 +1637,7 @@ async function renderTree(){
     const childPos = memberPos[link.childId];
     if(!parentUnit || !childPos) return;
     if(TREE.collapsed.has(parentUnit.id)) return;
-    const px = 40 + parentUnit.x*unitWidth + unitWidth/2;
+    const px = 40 + (parentUnit.x - minX)*unitWidth + unitWidth/2;
     const py = 40 + parentUnit.depth*(NODE_H+GAP_Y) + NODE_H;
     const cx = childPos.x + 48;
     const cy = childPos.y;
@@ -1570,7 +1650,7 @@ async function renderTree(){
 
   // unit cards
   allUnits.forEach(u=>{
-    const baseX = 40 + u.x*unitWidth;
+    const baseX = 40 + (u.x - minX)*unitWidth;
     const baseY = 40 + u.depth*(NODE_H+GAP_Y);
     const wrap = document.createElementNS("http://www.w3.org/2000/svg","g");
     wrap.setAttribute("class","unit-card" + (u.members.some(m=>m.id===TREE.focusId) ? " focused":""));
