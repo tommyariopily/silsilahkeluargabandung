@@ -27,6 +27,9 @@ const api = {
     return gasGet('getSettings');
   },
   async addMember(data) {
+    // Jika `data` membawa foto baru (lihat index.html: uploadSelectedPhotoIfAny()),
+    // upload foto dulu lewat api.uploadPhoto() dan set data.foto = url hasilnya
+    // SEBELUM memanggil addMember — jangan kirim base64 langsung di sini.
     return gasPost({ action: 'addMember', data, email: getCurrentUserEmail() });
   },
   async updateMember(id, data) {
@@ -34,6 +37,9 @@ const api = {
   },
   async deleteMember(id) {
     return gasPost({ action: 'deleteMember', id, email: getCurrentUserEmail() });
+  },
+  async uploadPhoto(base64, fileName, mimeType) {
+    return gasPost({ action: 'uploadPhoto', base64, fileName, mimeType, email: getCurrentUserEmail() });
   },
   async login(email) {
     return gasPost({ action: 'login', email });
