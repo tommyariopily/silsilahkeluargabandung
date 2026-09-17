@@ -1757,8 +1757,9 @@ function centerOnFocus(totalW, totalH){
 }
 function focusOnMember(id){ TREE.focusId = id; renderTree(); setTimeout(()=>{ TREE.focusId=null; },1600); }
 
-document.getElementById("btnZoomIn").addEventListener("click", ()=>{ TREE.scale = Math.min(TREE.scale+0.15, 2); applyTransform(); });
-document.getElementById("btnZoomOut").addEventListener("click", ()=>{ TREE.scale = Math.max(TREE.scale-0.15, 0.4); applyTransform(); });
+const TREE_MIN_SCALE = 0.4, TREE_MAX_SCALE = 2.5;
+document.getElementById("btnZoomIn").addEventListener("click", ()=>{ TREE.scale = Math.min(TREE.scale+0.15, TREE_MAX_SCALE); applyTransform(); });
+document.getElementById("btnZoomOut").addEventListener("click", ()=>{ TREE.scale = Math.max(TREE.scale-0.15, TREE_MIN_SCALE); applyTransform(); });
 document.getElementById("btnReset").addEventListener("click", ()=>{ TREE.scale=1; TREE.tx=40; TREE.ty=40; applyTransform(); });
 document.getElementById("btnFullscreen").addEventListener("click", ()=>{
   const el = document.getElementById("appShell");
@@ -1776,9 +1777,59 @@ document.getElementById("btnFullscreen").addEventListener("click", ()=>{
   wrap.addEventListener("mousedown", e=>start(e.clientX,e.clientY));
   window.addEventListener("mousemove", e=>move(e.clientX,e.clientY));
   window.addEventListener("mouseup", end);
-  wrap.addEventListener("touchstart", e=>{ const t=e.touches[0]; start(t.clientX,t.clientY); }, {passive:true});
-  wrap.addEventListener("touchmove", e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); }, {passive:true});
-  wrap.addEventListener("touchend", end);
+
+  /** Zoom di titik (cx,cy) — relatif ke pojok kiri-atas #treeWrap — supaya titik itu tetap di tempat yang sama saat skala berubah (bukan melompat ke pojok). */
+  function zoomAt(cx, cy, factor){
+    const newScale = Math.min(Math.max(TREE.scale * factor, TREE_MIN_SCALE), TREE_MAX_SCALE);
+    const ratio = newScale / TREE.scale;
+    TREE.tx = cx - (cx - TREE.tx) * ratio;
+    TREE.ty = cy - (cy - TREE.ty) * ratio;
+    TREE.scale = newScale;
+    applyTransform();
+  }
+
+  // Zoom dengan scroll/roda mouse, mengarah ke posisi kursor.
+  wrap.addEventListener("wheel", (e)=>{
+    e.preventDefault();
+    const rect = wrap.getBoundingClientRect();
+    zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.12 : 1/1.12);
+  }, {passive:false});
+
+  // Sentuhan: 1 jari = geser (pan), 2 jari = cubit utk zoom (pinch-to-zoom).
+  let pinchActive = false, pinchStartDist = 0, pinchStartScale = 1, pinchMidX = 0, pinchMidY = 0;
+  function touchDist(t0, t1){ return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); }
+  wrap.addEventListener("touchstart", (e)=>{
+    if(e.touches.length >= 2){
+      pinchActive = true; dragging = false;
+      const rect = wrap.getBoundingClientRect();
+      pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+      pinchStartScale = TREE.scale;
+      pinchMidX = (e.touches[0].clientX + e.touches[1].clientX)/2 - rect.left;
+      pinchMidY = (e.touches[0].clientY + e.touches[1].clientY)/2 - rect.top;
+    } else if(e.touches.length === 1){
+      pinchActive = false;
+      const t = e.touches[0]; start(t.clientX, t.clientY);
+    }
+  }, {passive:true});
+  wrap.addEventListener("touchmove", (e)=>{
+    if(pinchActive && e.touches.length >= 2){
+      const dist = touchDist(e.touches[0], e.touches[1]);
+      if(pinchStartDist > 0){
+        const newScale = Math.min(Math.max(pinchStartScale * (dist / pinchStartDist), TREE_MIN_SCALE), TREE_MAX_SCALE);
+        const ratio = newScale / TREE.scale;
+        TREE.tx = pinchMidX - (pinchMidX - TREE.tx) * ratio;
+        TREE.ty = pinchMidY - (pinchMidY - TREE.ty) * ratio;
+        TREE.scale = newScale;
+        applyTransform();
+      }
+    } else if(!pinchActive && e.touches.length === 1){
+      const t = e.touches[0]; move(t.clientX, t.clientY);
+    }
+  }, {passive:true});
+  wrap.addEventListener("touchend", (e)=>{
+    if(e.touches.length < 2) pinchActive = false;
+    if(e.touches.length === 0) end();
+  });
 })();
 
 /* =========================================================
